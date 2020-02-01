@@ -1,4 +1,4 @@
-import math, pygame, os
+import math, pygame, os, random
 
 pygame.init()
 size = width, height = 960, 520
@@ -14,6 +14,7 @@ deads = pygame.sprite.Group()
 animH = pygame.sprite.Group()
 animW = pygame.sprite.Group()
 animL = pygame.sprite.Group()
+other = pygame.sprite.Group()
 gun = pygame.sprite.Group()
 shild = pygame.sprite.Group()
 aim = pygame.sprite.Group()
@@ -86,7 +87,7 @@ class Arrow(pygame.sprite.Sprite):
         self.y = (self.rect.y - 260) // 50
         self.x = int(self.rect.x - (self.rect.y - 260) + 170 + ZX) // 100
         if 0 <= self.y <= 2 and 0 <= self.x < len(MAP[0]):
-            MAP[self.y][self.x] = 2
+            MAP[self.y][self.x] = 1
 
     def action(self):
         if pygame.sprite.spritecollideany(self, persF) and not self.f:
@@ -94,7 +95,7 @@ class Arrow(pygame.sprite.Sprite):
                 if i.activ == 1 and pygame.sprite.spritecollideany(self, persF).tipe[0] != i.tipe:
                     i.activ = -1
                     break
-            PERSES[[i.tipe for i in PERSES].index(pygame.sprite.spritecollide(self, persF, False)[0].tipe[0])].activ *= -1
+            PERSES[PERSES.index(pygame.sprite.spritecollide(self, persF, False)[0].mommy)].activ *= -1
         elif not self.f and any(i.activ == 1 for i in PERSES) \
                 and not self.f and any(i.activ == 1 for i in PERSES):
             if 0 <= self.y <= 2 and 0 <= self.x <= len(MAP[0]):
@@ -131,7 +132,7 @@ class Pers:
         self.pazzle[-1].y = self.y - self.pazzle[-1].image.get_height()
         self.pazzle[-1].rect.x = int(self.pazzle[-1].x)
         self.pazzle[-1].rect.y = int(self.pazzle[-1].y)
-        for i in pazzle:
+        for i in pazzle + [self]:
             i.mommy = self
         self.xp = x
         self.yp = y
@@ -154,7 +155,7 @@ class Pers:
         pygame.draw.rect(screen, pygame.Color('green'),
                          (self.pazzle[0].rect.center[0] - 25, self.pazzle[0].y - 10, int(50 * self.hp / self.maxhp), 5))
         self.move()
-        MAP[int(self.yp)][int(self.xp)] = 1
+        MAP[int(self.yp)][int(self.xp)] = self
         self.pazzle[0].update()
         self.pazzle[-1].update()
         self.yp = (self.y - 290) // 50
@@ -189,9 +190,6 @@ class Pers:
                     self.pazzle[-1].k = 0.9 * self.revers
         if int(self.pazzle[0].cur_frame) == 0:
             self.pazzle[0].k = 1
-        if self.targ != '':
-            if self.targ[0].hp <= 0:
-                self.targ = ''
 
     def rev(self, image):
         if self.revers == 1:
@@ -210,12 +208,12 @@ class Enemy(Pers):
         if self.targ == '':
             for i in range(0, -5, -1):
                 for j in range(3):
-                    if MAP[j][int(self.xp) + i] != 0:
-                        if j == int(self.yp) and i == 0:
+                    if MAP[j][int(self.xp) + i] != 0 and MAP[j][int(self.xp) + i] != 'd' and MAP[j][int(self.xp) + i] != self.mommy and MAP[j][int(self.xp) + i] != 1:
+                        if MAP[j][int(self.xp) + i].tipe == '2':
+                            if MAP[j][int(self.xp) + i].targ != '':
+                                self.targ = MAP[j][int(self.xp) + i].targ
                             continue
-                        if [int(self.xp) + i, j] not in [[i.xp, i.yp] for i in PERSES]:
-                            continue
-                        self.targ = [PERSES[[[i.xp, i.yp] for i in PERSES].index([int(self.xp) + i, j])], 1]
+                        self.targ = MAP[j][int(self.xp) + i]
                         stop = True
                         break
                 if stop:
@@ -252,6 +250,8 @@ class FriendSniper(Friend):
         super().update()
         if self.targ != '':
             self.attack()
+            if self.targ[0].hp <= 0:
+                self.targ = ''
         elif self.ammonow < self.ammo and self.gun.cur_frame < 6:
             self.gun.cur_frame = 6
             self.gun.k = 1
@@ -321,7 +321,7 @@ class FriendSniper(Friend):
         if int(self.gun.cur_frame) == 10:
             self.ammonow = 1
         if self.targ[0].targ == '':
-            self.targ[0].targ = self, 1
+            self.targ[0].targ = self
 
     def dead(self):
         self.tipe = ''
@@ -366,7 +366,7 @@ class MainEnemy(Enemy):
 
     def attack(self):
         a = self.pazzle + [self.gun]
-        if self.x > self.targ[0].x:
+        if self.x > self.targ.x:
             if self.revers == 1:
                 for i in range(len(a) - 1, -1, -1):
                     a[i].frames = [pygame.transform.flip(j, True, False) for j in a[i].frames]
@@ -378,7 +378,7 @@ class MainEnemy(Enemy):
                         a[i].rect.x = int(a[i].x)
                     a[i].image = a[i].frames[int(a[i].cur_frame)]
                 self.revers = -1
-        if self.x < self.targ[0].x:
+        if self.x < self.targ.x:
             if self.revers == -1:
                 for i in range(len(a) - 1, -1, -1):
                     a[i].frames = [pygame.transform.flip(j, True, False) for j in a[i].frames]
@@ -390,27 +390,34 @@ class MainEnemy(Enemy):
                         a[i].rect.x = int(a[i].x)
                     a[i].image = a[i].frames[int(a[i].cur_frame)]
                 self.revers = 1
-        if int(self.gun.cur_frame) == 0:
-            pygame.mixer.Sound('data\snipeFire.wav').play()
-            self.pazzle[1].k = 1
-            self.gun.k = 1
-            rdmg = self.dmg
-            self.targ[0].hp -= rdmg / 8.4999
-            self.targ[0].pazzle[int(self.targ[1])].hp -= rdmg / 8.4999
-            self.ammonow -= 1 / 9.001
-            if self.targ[0].hp <= 0:
-                self.targ[0].dead()
-                for i in ENEMIS:
-                    if i != self and i.targ == self.targ:
-                        i.targ = ''
-                        i.xtarg = i.xp
-                        i.ytarg = i.yp
-                self.targ = ''
-        if int(self.gun.cur_frame) == 3 and int(self.ammonow) != 0:
-            self.gun.cur_frame = 0
-            self.pazzle[1].cur_frame = 0
-        elif int(self.gun.cur_frame) == 9 and int(self.ammonow) == 0:
-            self.ammonow = 7
+        if self.targ.xp + 3 < self.xp:
+            self.xtarg = self.targ.xp
+        else:
+            if int(self.gun.cur_frame) == 0:
+                pygame.mixer.Sound('data\snipeFire.wav').play()
+                self.pazzle[1].k = 1
+                self.gun.k = 1
+                rdmg = self.dmg
+                if MAP[int(self.targ.yp)][int(self.targ.xp) + 1] == 'd':
+                    rdmg *= ifdodge(self.targ.dodge + 20)
+                else:
+                    rdmg *= ifdodge(self.targ.dodge)
+                self.targ.hp -= rdmg / 8.4999
+                self.targ.pazzle[1].hp -= rdmg / 8.4999
+                self.ammonow -= 1 / 9.001
+                if self.targ.hp <= 0:
+                    self.targ.dead()
+                    for i in ENEMIS:
+                        if i != self and i.targ == self.targ:
+                            i.targ = ''
+                            i.xtarg = i.xp
+                            i.ytarg = i.yp
+                    self.targ = ''
+            if int(self.gun.cur_frame) == 3 and int(self.ammonow) != 0:
+                self.gun.cur_frame = 0
+                self.pazzle[1].cur_frame = 0
+            elif int(self.gun.cur_frame) == 9 and int(self.ammonow) == 0:
+                self.ammonow = 7
 
     def moveG(self):
         if int(self.y) != self.ytarg * 50 + 290:
@@ -455,7 +462,7 @@ class EnemyShild(Enemy):
         super().update()
         if self.targ != '':
             a = self.pazzle + [self.shild]
-            if self.x > self.targ[0].x:
+            if self.x > self.targ.x:
                 if self.revers == 1:
                     for i in range(len(a) - 1, -1, -1):
                         a[i].frames = [pygame.transform.flip(j, True, False) for j in a[i].frames]
@@ -467,7 +474,7 @@ class EnemyShild(Enemy):
                             a[i].rect.x = int(a[i].x)
                         a[i].image = a[i].frames[int(a[i].cur_frame)]
                     self.revers = -1
-            if self.x < self.targ[0].x:
+            if self.x < self.targ.x:
                 if self.revers == -1:
                     for i in range(len(a) - 1, -1, -1):
                         a[i].frames = [pygame.transform.flip(j, True, False) for j in a[i].frames]
@@ -480,23 +487,25 @@ class EnemyShild(Enemy):
                         a[i].image = a[i].frames[int(a[i].cur_frame)]
                     self.revers = 1
             if self.revers == 1:
-                if self.xp != self.targ[0].xp - 1:
-                    self.xtarg = self.targ[0].xp - 1
+                if self.xp != self.targ.xp - 1:
+                    self.xtarg = self.targ.xp - 1
                 else:
                     if int(self.shild.cur_frame) == 0:
                         self.attack()
             if self.revers == -1:
-                if self.xp != self.targ[0].xp + 1:
-                    self.xtarg = self.targ[0].xp + 1
+                if self.xp != self.targ.xp + 1:
+                    self.xtarg = self.targ.xp + 1
                 else:
                     if int(self.shild.cur_frame) == 0:
                         self.attack()
-            if self.yp != self.targ[0].yp:
-                self.ytarg = self.targ[0].yp
+            if self.yp != self.targ.yp:
+                self.ytarg = self.targ.yp
             if int(self.shild.cur_frame) == 10:
-                self.targ[0].hp -= 15 / FPS
-                if self.targ[0].hp <= 0:
-                    self.targ[0].dead()
+                self.targ.hp -= 15 / FPS
+                if self.targ.hp <= 0:
+                    self.targ.dead()
+            if self.targ.hp <= 0:
+                self.targ = ''
         self.shild.update()
         self.pazzle[1].update()
         self.moveS()
@@ -644,6 +653,21 @@ class Death(AnimatedSprite):
             return -1
 
 
+class Block(pygame.sprite.Sprite):
+    def __init__(self, image, clas, xp, yp):
+        super().__init__(clas)
+        self.image = image
+        self.rect = self.image.get_rect()
+        self.xp = xp
+        self.rect.x = xp * 100 + yp * 50 - 170
+        self.yp = yp
+        self.rect.y = yp * 50 + 210
+
+    def update(self):
+        MAP[self.yp][self.xp] = 'd'
+        self.rect.x = self.xp * 100 + self.yp * 50 - ZX - 150
+
+
 def mapDraw():
     z = -170
     for i in range(len(MAP)):
@@ -662,24 +686,29 @@ def chColor(i):
         return pygame.Color('white')
     elif i == 1:
         return pygame.Color('red')
-    elif i == 2:
+    else:
         return pygame.Color('green')
 
 
 def poz(i):
     if i == 0:
         return 0
-    elif i == 1:
-        return 2
-    elif i == 2:
+    else:
         return 2
 
 
 def dlin(i):
     if i == 0:
         return 1
-    elif i == 1 or i == 2:
+    else:
         return 3
+
+
+def ifdodge(d):
+    if random.randint(0, 100) <= d:
+        return 0
+    else:
+        return 1
 
 
 def fireSound():
@@ -689,26 +718,26 @@ def fireSound():
 MAP = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+bloks = [Block(load_image('block.png', 2), other, 5, 1)]
 back1 = Background(pygame.transform.scale(load_image('poleu.png', 1), (2440, 520)), background1)
 clock = pygame.time.Clock()
 running = True
 runlning = False
-runwning = False
-First = FriendSniper([10, 1, 0, 0, 0, 40], [PersHead(load_image('head.png', 2), 8, 1, persF, '10', 4, 4, 10, 10),
+First = FriendSniper([10, 1, 0, 10, 0, 40], [PersHead(load_image('head.png', 2), 8, 1, persF, '10', 4, 4, 10, 10),
                                 PersBody(load_image('body.png', 2), 11, 1, persF, '11', -2, 4, 10, 10),
                                 PersLegs(load_image('go.png', 2), 8, 1, persF, '12', 10)], '1', -1, 0,
              PersGun(load_image('firet.png', 2), 11, 1, gun, '13', -14, -4, 10), 1)
-Second = FriendSniper([10, 1, 0, 0, 0, 40], [PersHead(load_image('head.png', 2), 8, 1, persF, '40', 4, 4, 10, 10),
-                                PersBody(load_image('body.png', 2), 11, 1, persF, '41', -2, 4, 10, 10),
-                                PersLegs(load_image('go.png', 2), 8, 1, persF, '42', 10)], '4', -1, 1,
+Second = FriendSniper([10, 1, 0, 10, 0, 40], [PersHead(load_image('head.png', 2), 8, 1, persF, '10', 4, 4, 10, 10),
+                                PersBody(load_image('body.png', 2), 11, 1, persF, '11', -2, 4, 10, 10),
+                                PersLegs(load_image('go.png', 2), 8, 1, persF, '12', 10)], '1', -1, 1,
              PersGun(load_image('firet.png', 2), 11, 1, gun, '43', -14, -4, 10), 1)
 One = EnemyShild([50, 0, 0, 0, 0, 30], [PersHead(load_image('enemyHead.png', 2), 1, 1, persE, '20', 18, 22, 2, 10),
                                      PersBody(load_image('enemyBody.png', 2), 12, 1, persE, '21', -10, 6, 4, 10),
                                      PersLegs(load_image('enemyLegs.png', 2), 7, 1, persE, '22', 10)], '2', 12, 0,
               PersShild(load_image('shild.png', 2), 12, 1, shild, '24', 22, 30, -30, 10))
-Main = MainEnemy([20, 1, 0, 0, 0, 40], [PersHead(load_image('mainEnemyHead.png', 2), 8, 1, persE, '30', 10, 16, 0, 10),
-                                PersBody(load_image('mainEnemyBody.png', 2), 11, 1, persE, '31', -4, 16, 0, 10),
-                                PersLegs(load_image('mainEnemyLegs.png', 2), 8, 1, persE, '32', 10)], '3', 12, 1,
+Main = MainEnemy([20, 1, 0, 0, 0, 40], [PersHead(load_image('mainEnemyHead.png', 2), 8, 1, persE, '20', 10, 16, 0, 10),
+                                PersBody(load_image('mainEnemyBody.png', 2), 11, 1, persE, '21', -4, 16, 0, 10),
+                                PersLegs(load_image('mainEnemyLegs.png', 2), 8, 1, persE, '22', 10)], '2', 12, 1,
              PersGun(load_image('mainEnemyGun.png', 2), 11, 1, gun, '33', -4, 16, -38), 7)
 Two = EnemyShild([50, 0, 0, 0, 0, 30], [PersHead(load_image('enemyHead.png', 2), 1, 1, persE, '20', 18, 22, 2, 10),
                                      PersBody(load_image('enemyBody.png', 2), 12, 1, persE, '21', -10, 6, 4, 10),
@@ -735,203 +764,202 @@ for i in range(len(HEADS)):
 start = False
 retry = True
 
-while retry:
-    retry = False
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            if event.type == pygame.MOUSEMOTION:
-                x, y = event.pos
+retry = False
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.MOUSEMOTION:
+            x, y = event.pos
+            if text_x - 10 < event.pos[0] < text_x + text_w + 10 and \
+                    text_y - 10 < event.pos[1] < text_y + text_h + 10 and not start:
+                aimn.image = load_image('aimFriend.png', 1 / 16)
+            else:
+                aimn.image = load_image('aim.png', 1 / 24)
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
                 if text_x - 10 < event.pos[0] < text_x + text_w + 10 and \
-                        text_y - 10 < event.pos[1] < text_y + text_h + 10 and not start:
-                    aimn.image = load_image('aimFriend.png', 1 / 16)
-                else:
-                    aimn.image = load_image('aim.png', 1 / 24)
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    if text_x - 10 < event.pos[0] < text_x + text_w + 10 and \
-                            text_y - 10 < event.pos[1] < text_y + text_h + 10:
-                        start = True
-                        for i in range(len(PERSES)):
-                            PERSES[i].xtarg = i // 3 + 2
-                            PERSES[i].ytarg = 0 + i % 3
-        if pygame.mouse.get_focused():
-            pygame.mouse.set_visible(False)
-            aimn.rect.x = x
-            aimn.rect.y = y
-        background1.draw(screen)
-        for i in PERSES + ENEMIS:
-            i.update()
-        persF.draw(screen)
-        shild.draw(screen)
-        gun.draw(screen)
-        aimn.update()
-        background2.draw(screen)
-        if not start:
-            hi.update()
-            animH.draw(screen)
-            pygame.draw.rect(screen, (48, 213, 200), (text_x - 10, text_y - 10,
-                                                             text_w + 20, text_h + 10))
-            screen.blit(text, (text_x, text_y))
-            pygame.draw.rect(screen, pygame.Color('black'), (text_x - 10, text_y - 10,
-                                                   text_w + 20, text_h + 10), 3)
-            aim.draw(screen)
-        pygame.draw.rect(screen, pygame.Color('black'), (0, 0, width, 100))
-        pygame.draw.rect(screen, pygame.Color('black'), (0, height - 100, width, 100))
-        clock.tick(FPS)
-        pygame.display.flip()
-        if all([i.xp == i.xtarg for i in PERSES] + [i.yp == i.ytarg for i in PERSES]) and start:
-            break
-
-    a = 100
-
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-        background1.draw(screen)
-        for i in PERSES + ENEMIS:
-            i.update()
-        if pygame.mouse.get_focused():
-            pygame.mouse.set_visible(False)
-        persF.draw(screen)
-        gun.draw(screen)
-        shild.draw(screen)
-        background2.draw(screen)
-        pygame.draw.rect(screen, pygame.Color('black'), (0, 0, width, a))
-        pygame.draw.rect(screen, pygame.Color('black'), (0, height - a, width, a))
-        a -= 100 / FPS
-        if int(a) == 0:
-            break
-        clock.tick(FPS)
-        pygame.display.flip()
-
-    x, y = 0, 0
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            if event.type == pygame.KEYDOWN:
-                back1.move(event)
-                back2.move(event)
-                if event.key == pygame.K_a:
-                    aimn.f = True
-                if event.key == pygame.K_p:
-                    if THE_WORLD:
-                        THE_WORLD = False
-                    else:
-                        THE_WORLD = True
-            if event.type == pygame.KEYUP:
-                back1.notmove(event)
-                back2.notmove(event)
-                if event.key == pygame.K_a:
-                    aimn.f = False
-            if event.type == pygame.MOUSEMOTION:
-                x, y = event.pos
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    aimn.action()
-        if pygame.mouse.get_focused():
-            pygame.mouse.set_visible(False)
-            aimn.rect.x = x
-            aimn.rect.y = y
-        back1.update()
-        back2.update()
-        aimn.opr()
-        background1.draw(screen)
-        aimn.update()
-        mapDraw()
-        persF.draw(screen)
-        persE.draw(screen)
-        MAP = [[0 for i in range(20)] for i in range(3)]
-        if THE_WORLD:
-            for i in PERSES + ENEMIS:
-                i.update()
-        deads.draw(screen)
-        for i in DEAD:
-            i.update()
-        shild.draw(screen)
-        gun.draw(screen)
-        background2.draw(screen)
-        if any([i.activ == 1 for i in PERSES]):
-            h = HEADS[[i.activ for i in PERSES].index(1)]
-            pygame.draw.circle(screen, pygame.Color('black'), (h.rect.x + h.image.get_width() // 2, h.rect.y + h.image.get_height() // 2), h.image.get_height(), 6)
-        Heads.draw(screen)
-        for i in range(len(HEADS)):
-            screen.blit(heds.render("{}/{}".format(int(PRS[i].ammonow), PRS[i].ammo), 30, (0, 0, 0)),
-                        (HEADS[i].rect.x + 50, HEADS[i].rect.y))
-            screen.blit(heds.render("{}/{}".format(int(PRS[i].hp), PRS[i].maxhp), 30, (0, 0, 0)),
-                        (HEADS[i].rect.x + 50, HEADS[i].rect.y + 20))
+                        text_y - 10 < event.pos[1] < text_y + text_h + 10:
+                    start = True
+                    for i in range(len(PERSES)):
+                        PERSES[i].xtarg = i // 3 + 2
+                        PERSES[i].ytarg = 0 + i % 3
+    if pygame.mouse.get_focused():
+        pygame.mouse.set_visible(False)
+        aimn.rect.x = x
+        aimn.rect.y = y
+    background1.draw(screen)
+    for i in PERSES + ENEMIS:
+        i.update()
+    persF.draw(screen)
+    shild.draw(screen)
+    gun.draw(screen)
+    aimn.update()
+    background2.draw(screen)
+    if not start:
+        hi.update()
+        animH.draw(screen)
+        pygame.draw.rect(screen, (48, 213, 200), (text_x - 10, text_y - 10,
+                                                         text_w + 20, text_h + 10))
+        screen.blit(text, (text_x, text_y))
+        pygame.draw.rect(screen, pygame.Color('black'), (text_x - 10, text_y - 10,
+                                               text_w + 20, text_h + 10), 3)
         aim.draw(screen)
-        if len(PERSES) == 0:
+    pygame.draw.rect(screen, pygame.Color('black'), (0, 0, width, 100))
+    pygame.draw.rect(screen, pygame.Color('black'), (0, height - 100, width, 100))
+    clock.tick(FPS)
+    pygame.display.flip()
+    if all([i.xp == i.xtarg for i in PERSES] + [i.yp == i.ytarg for i in PERSES]) and start:
+        break
+a = 100
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
             running = False
-            runlning = True
-            text = font.render("YOU LOSE!", 30, (73, 66, 61))
-            lose = AnimatedSprite(load_image('lose.png', 3), 12, 1, -30, height // 2 - 20, animL)
-            lose.k = 1
-            a = [lose, animL, persE]
-        if len(ENEMIS) == 0:
+    background1.draw(screen)
+    for i in PERSES + ENEMIS:
+        i.update()
+    if pygame.mouse.get_focused():
+        pygame.mouse.set_visible(False)
+    persF.draw(screen)
+    gun.draw(screen)
+    shild.draw(screen)
+    background2.draw(screen)
+    pygame.draw.rect(screen, pygame.Color('black'), (0, 0, width, a))
+    pygame.draw.rect(screen, pygame.Color('black'), (0, height - a, width, a))
+    a -= 100 / FPS
+    if int(a) == 0:
+        break
+    clock.tick(FPS)
+    pygame.display.flip()
+x, y = 0, 0
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
             running = False
-            runlning = True
-            text = font.render("YOU WIN!", 30, (73, 66, 61))
-            win = AnimatedSprite(load_image('win.png', 3), 4, 1, -30, height // 2 - 20, animW)
-            win.k = 1
-            a = [win, animW, persF]
-        clock.tick(FPS)
-        pygame.display.flip()
-
-    text_x = width // 2 - text.get_width() // 2
-    text_y = height // 2 - text.get_height() // 2
-    text_w = text.get_width()
-    text_h = text.get_height()
-    text2 = font.render("EXIT", 30, (73, 66, 61))
-    text2_x = width // 2 - text2.get_width() // 2
-    text2_y = height // 2 - text2.get_height() // 2
-    text2_w = text2.get_width()
-    text2_h = text2.get_height()
-
-    while runlning:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                runlning = False
-            if event.type == pygame.MOUSEMOTION:
-                x, y = event.pos
-                if (text_x - 10 < event.pos[0] < text_x + text_w + 20 and \
-                        text_y - 15 - text_h // 2 < event.pos[1] < text_y + text_h + 10):
-                    aimn.image = load_image('aimFriend.png', 1 / 16)
+        if event.type == pygame.KEYDOWN:
+            back1.move(event)
+            back2.move(event)
+            if event.key == pygame.K_a:
+                aimn.f = True
+            if event.key == pygame.K_p:
+                if THE_WORLD:
+                    THE_WORLD = False
+                else:
+                    THE_WORLD = True
+        if event.type == pygame.KEYUP:
+            back1.notmove(event)
+            back2.notmove(event)
+            if event.key == pygame.K_a:
+                aimn.f = False
+        if event.type == pygame.MOUSEMOTION:
+            x, y = event.pos
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                aimn.action()
+    back1.update()
+    back2.update()
+    aimn.opr()
+    background1.draw(screen)
+    aimn.update()
+    mapDraw()
+    for i in bloks:
+        i.update()
+    other.draw(screen)
+    persF.draw(screen)
+    persE.draw(screen)
+    MAP = [[0 for i in range(20)] for i in range(3)]
+    for i in bloks:
+        i.update()
+    if THE_WORLD:
+        for i in PERSES + ENEMIS:
+            i.update()
+    deads.draw(screen)
+    for i in DEAD:
+        i.update()
+    shild.draw(screen)
+    gun.draw(screen)
+    background2.draw(screen)
+    if any([i.activ == 1 for i in PERSES]):
+        h = HEADS[[i.activ for i in PERSES].index(1)]
+        pygame.draw.circle(screen, pygame.Color('black'), (h.rect.x + h.image.get_width() // 2, h.rect.y + h.image.get_height() // 2), h.image.get_height(), 6)
+    Heads.draw(screen)
+    for i in range(len(HEADS)):
+        screen.blit(heds.render("{}/{}".format(int(PRS[i].ammonow), PRS[i].ammo), 30, (0, 0, 0)),
+                    (HEADS[i].rect.x + 50, HEADS[i].rect.y))
+        screen.blit(heds.render("{}/{}".format(int(PRS[i].hp), PRS[i].maxhp), 30, (0, 0, 0)),
+                    (HEADS[i].rect.x + 50, HEADS[i].rect.y + 20))
+    if pygame.mouse.get_focused():
+        pygame.mouse.set_visible(False)
+        aimn.rect.x = x
+        aimn.rect.y = y
+        aim.draw(screen)
+    if len(PERSES) == 0:
+        running = False
+        runlning = True
+        text = font.render("YOU LOSE!", 30, (73, 66, 61))
+        lose = AnimatedSprite(load_image('lose.png', 3), 12, 1, -30, height // 2 - 20, animL)
+        lose.k = 1
+        a = [lose, animL, persE]
+    if len(ENEMIS) == 0:
+        running = False
+        runlning = True
+        text = font.render("YOU WIN!", 30, (73, 66, 61))
+        win = AnimatedSprite(load_image('win.png', 3), 4, 1, -30, height // 2 - 20, animW)
+        win.k = 1
+        a = [win, animW, persF]
+    clock.tick(FPS)
+    pygame.display.flip()
+text_x = width // 2 - text.get_width() // 2
+text_y = height // 2 - text.get_height() // 2
+text_w = text.get_width()
+text_h = text.get_height()
+text2 = font.render("EXIT", 30, (73, 66, 61))
+text2_x = width // 2 - text2.get_width() // 2
+text2_y = height // 2 - text2.get_height() // 2
+text2_w = text2.get_width()
+text2_h = text2.get_height()
+while runlning:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            runlning = False
+        if event.type == pygame.MOUSEMOTION:
+            x, y = event.pos
+            if (text_x - 10 < event.pos[0] < text_x + text_w + 20 and \
+                    text_y - 15 - text_h // 2 < event.pos[1] < text_y + text_h + 10):
+                aimn.image = load_image('aimFriend.png', 1 / 16)
+            if (text2_x - 10 < event.pos[0] < text2_x + text2_w + 20 and \
+                    text2_y + text2_h // 2 + 5 < event.pos[1] < text2_y + text2_h + 10):
+                aimn.image = load_image('aimFriend.png', 1 / 16)
+            else:
+                aimn.image = load_image('aim.png', 1 / 24)
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
                 if (text2_x - 10 < event.pos[0] < text2_x + text2_w + 20 and \
-                        text2_y + text2_h // 2 + 5 < event.pos[1] < text2_y + text2_h + 10):
-                    aimn.image = load_image('aimFriend.png', 1 / 16)
-                else:
-                    aimn.image = load_image('aim.png', 1 / 24)
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    if (text2_x - 10 < event.pos[0] < text2_x + text2_w + 20 and \
-                        text2_y + text2_h // 2 < event.pos[1] < text2_y + text2_h + 10):
-                            retry = True
-                            runlning = False
-        if pygame.mouse.get_focused():
-            pygame.mouse.set_visible(False)
-            aimn.rect.x = x
-            aimn.rect.y = y
-        a[0].k = 1
-        background1.draw(screen)
-        a[2].draw(screen)
-        gun.draw(screen)
-        shild.draw(screen)
-        background2.draw(screen)
-        aimn.update()
-        a[0].update()
-        pygame.draw.rect(screen, (48, 213, 200), (text_x - 10, text_y - 10 - text_h // 2 - 5, text_w + 20, text_h + 10))
-        screen.blit(text, (text_x, text_y - text_h // 2 - 5))
-        pygame.draw.rect(screen, pygame.Color('black'), (text_x - 10, text_y - 10 - text_h // 2 - 5,
-                                                         text_w + 20, text_h + 10), 3)
-        pygame.draw.rect(screen, (48, 213, 200), (text2_x - 10, text2_y + text2_h // 2, text2_w + 20, text2_h + 10))
-        screen.blit(text2, (text2_x, text2_y + text2_h // 2 + 5))
-        pygame.draw.rect(screen, pygame.Color('black'), (text2_x - 10, text2_y + text_h // 2,
-                                                         text2_w + 20, text2_h + 10), 3)
-        aim.draw(screen)
-        a[1].draw(screen)
-        clock.tick(FPS)
-        pygame.display.flip()
+                    text2_y + text2_h // 2 < event.pos[1] < text2_y + text2_h + 10):
+                        retry = True
+                        runlning = False
+    if pygame.mouse.get_focused():
+        pygame.mouse.set_visible(False)
+        aimn.rect.x = x
+        aimn.rect.y = y
+    a[0].k = 1
+    background1.draw(screen)
+    a[2].draw(screen)
+    gun.draw(screen)
+    shild.draw(screen)
+    background2.draw(screen)
+    aimn.update()
+    a[0].update()
+    pygame.draw.rect(screen, (48, 213, 200), (text_x - 10, text_y - 10 - text_h // 2 - 5, text_w + 20, text_h + 10))
+    screen.blit(text, (text_x, text_y - text_h // 2 - 5))
+    pygame.draw.rect(screen, pygame.Color('black'), (text_x - 10, text_y - 10 - text_h // 2 - 5,
+                                                     text_w + 20, text_h + 10), 3)
+    pygame.draw.rect(screen, (48, 213, 200), (text2_x - 10, text2_y + text2_h // 2, text2_w + 20, text2_h + 10))
+    screen.blit(text2, (text2_x, text2_y + text2_h // 2 + 5))
+    pygame.draw.rect(screen, pygame.Color('black'), (text2_x - 10, text2_y + text_h // 2,
+                                                     text2_w + 20, text2_h + 10), 3)
+    aim.draw(screen)
+    a[1].draw(screen)
+    clock.tick(FPS)
+    pygame.display.flip()
