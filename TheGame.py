@@ -1,4 +1,4 @@
-import math, pygame, os, random
+import math, pygame, os, random, socket
 
 pygame.init()
 size = width, height = 960, 520
@@ -19,6 +19,7 @@ gun = pygame.sprite.Group()
 shild = pygame.sprite.Group()
 aim = pygame.sprite.Group()
 HEADS = []
+MY_TYPE = ''
 FPS = 60
 ZX = 0
 
@@ -92,7 +93,7 @@ class Arrow(pygame.sprite.Sprite):
     def action(self):
         if pygame.sprite.spritecollideany(self, persF) and not self.f:
             for i in PERSES:
-                if i.activ == 1 and pygame.sprite.spritecollideany(self, persF).tipe[0] != i.tipe:
+                if i.activ == 1 and pygame.sprite.spritecollideany(self, persF) != i:
                     i.activ = -1
                     break
             PERSES[PERSES.index(pygame.sprite.spritecollide(self, persF, False)[0].mommy)].activ *= -1
@@ -125,7 +126,7 @@ class Pers:
         self.dk = 1
         self.tipe = t
         self.activ = -1
-        self.targ = ''
+        self.targ = 'z'
         self.y = y * 50 + 290
         self.x = x * 100 + y * 50
         self.pazzle[-1].x = self.x - self.pazzle[-1].image.get_width() // 2 - 100
@@ -145,11 +146,6 @@ class Pers:
             self.pazzle[i].rect.y = int(self.pazzle[i].y)
 
     def update(self):
-        for i in self.pazzle + [self]:
-            if i.hp <= 0:
-                self.hp = 0
-                self.dead()
-                break
         pygame.draw.rect(screen, pygame.Color('red'),
                          (self.pazzle[0].rect.center[0] - 25, self.pazzle[0].y - 10, 50, 5))
         pygame.draw.rect(screen, pygame.Color('green'),
@@ -198,44 +194,7 @@ class Pers:
             return pygame.transform.flip(image, True, False)
 
 
-class Enemy(Pers):
-    def __init__(self, stats, pazzle, t, x, y):
-        super().__init__(stats, pazzle, t, x, y)
-
-    def update(self):
-        super().update()
-        stop = False
-        if self.targ == '':
-            for i in range(0, -5, -1):
-                for j in range(3):
-                    if MAP[j][int(self.xp) + i] != 0 and MAP[j][int(self.xp) + i] != 'd' and MAP[j][int(self.xp) + i] != self.mommy and MAP[j][int(self.xp) + i] != 1:
-                        if MAP[j][int(self.xp) + i].tipe == '2':
-                            if MAP[j][int(self.xp) + i].targ != '':
-                                self.targ = MAP[j][int(self.xp) + i].targ
-                            continue
-                        self.targ = MAP[j][int(self.xp) + i]
-                        stop = True
-                        break
-                if stop:
-                    break
-
-
-class Friend(Pers):
-    def __init__(self, stats, pazzle, t, x, y):
-        super().__init__(stats, pazzle, t, x, y)
-        self.miniPers()
-
-    def miniPers(self):
-        self.sprite = pygame.sprite.Sprite()
-        self.sprite.image = self.pazzle[0].image
-        self.sprite.rect = self.sprite.image.get_rect()
-        Heads.add(self.sprite)
-        HEADS.append(self.sprite)
-        self.sprite.rect.x = 5
-        self.sprite.rect.y = 20
-
-
-class FriendSniper(Friend):
+class FriendSniper(Pers):
     def __init__(self, stats, pazzle, t, x, y, gun, ammo):
         super().__init__(stats, pazzle, t, x, y)
         self.gun = gun
@@ -245,13 +204,16 @@ class FriendSniper(Friend):
         self.gun.rect.x = int(self.gun.x)
         self.gun.y = self.pazzle[-1].y - self.gun.image.get_height() + self.gun.sy
         self.gun.rect.y = int(self.gun.y)
+        if MY_TYPE == 'first' or MY_TYPE == '':
+            miniPers(self)
 
     def update(self):
         super().update()
-        if self.targ != '':
+        if self.targ != 'z':
             self.attack()
-            if self.targ[0].hp <= 0:
-                self.targ = ''
+            if int(self.targ[0].hp) <= 0:
+                self.targ[0].dead()
+                self.targ = 'z'
         elif self.ammonow < self.ammo and self.gun.cur_frame < 6:
             self.gun.cur_frame = 6
             self.gun.k = 1
@@ -313,15 +275,12 @@ class FriendSniper(Friend):
             self.gun.k = 1
         if int(self.gun.cur_frame) == 1:
             rdmg = self.dmg
-            if self.targ[1] == '0':
-                rdmg *= 5
             self.targ[0].hp -= rdmg / 9.001
-            self.targ[0].pazzle[int(self.targ[1])].hp -= rdmg / 8.4999
             self.ammonow -= 1 / 9.001
         if int(self.gun.cur_frame) == 10:
             self.ammonow = 1
-        if self.targ[0].targ == '':
-            self.targ[0].targ = self
+        if self.targ[0].targ == 'z' and MY_TYPE == '':
+            self.targ[0].targ = [self, 1]
 
     def dead(self):
         self.tipe = ''
@@ -334,13 +293,19 @@ class FriendSniper(Friend):
             self.pazzle[1].x + k * self.pazzle[1].image.get_width() - ZX - k * load_image('sniperDead.png',
                                                                                                      2).get_width() // 10),
                           int(self.y - load_image('sniperDead.png', 2).get_height()), deads, self.revers))
-        del PERSES[PERSES.index(self)]
+        if MY_TYPE == '' or MY_TYPE == 'first':
+            del PERSES[PERSES.index(self)]
+        else:
+            del ENEMIS[ENEMIS.index(self)]
         for i in self.pazzle:
-            persF.remove(i)
+            if MY_TYPE == '' or MY_TYPE == 'first':
+                persF.remove(i)
+            else:
+                persE.remove(i)
             gun.remove(self.gun)
 
 
-class MainEnemy(Enemy):
+class MainEnemy(Pers):
     def __init__(self, stats, pazzle, t, x, y, gun, ammo):
         super().__init__(stats, pazzle, t, x, y)
         self.gun = gun
@@ -350,10 +315,28 @@ class MainEnemy(Enemy):
         self.gun.rect.x = int(self.gun.x)
         self.gun.y = self.pazzle[-1].y - self.gun.image.get_height() + self.gun.sy
         self.gun.rect.y = int(self.gun.y)
+        if MY_TYPE == 'second':
+            miniPers(self)
 
     def update(self):
+        if MY_TYPE == '':
+            stop = False
+            if self.targ == 'z':
+                for i in range(0, -5, -1):
+                    for j in range(3):
+                        if MAP[j][int(self.xp) + i] != 0 and MAP[j][int(self.xp) + i] != 'd' and MAP[j][
+                            int(self.xp) + i] != self.mommy and MAP[j][int(self.xp) + i] != 1:
+                            if MAP[j][int(self.xp) + i].tipe == '2':
+                                if MAP[j][int(self.xp) + i].targ != 'z':
+                                    self.targ = MAP[j][int(self.xp) + i].targ
+                                continue
+                            self.targ = [MAP[j][int(self.xp) + i], 1]
+                            stop = True
+                            break
+                    if stop:
+                        break
         super().update()
-        if self.targ != '':
+        if self.targ != 'z':
             self.attack()
         else:
             self.gun.image = self.gun.frames[3]
@@ -366,7 +349,7 @@ class MainEnemy(Enemy):
 
     def attack(self):
         a = self.pazzle + [self.gun]
-        if self.x > self.targ.x:
+        if self.x > self.targ[0].x:
             if self.revers == 1:
                 for i in range(len(a) - 1, -1, -1):
                     a[i].frames = [pygame.transform.flip(j, True, False) for j in a[i].frames]
@@ -378,7 +361,7 @@ class MainEnemy(Enemy):
                         a[i].rect.x = int(a[i].x)
                     a[i].image = a[i].frames[int(a[i].cur_frame)]
                 self.revers = -1
-        if self.x < self.targ.x:
+        if self.x < self.targ[0].x:
             if self.revers == -1:
                 for i in range(len(a) - 1, -1, -1):
                     a[i].frames = [pygame.transform.flip(j, True, False) for j in a[i].frames]
@@ -390,29 +373,30 @@ class MainEnemy(Enemy):
                         a[i].rect.x = int(a[i].x)
                     a[i].image = a[i].frames[int(a[i].cur_frame)]
                 self.revers = 1
-        if self.targ.xp + 3 < self.xp:
-            self.xtarg = self.targ.xp
+        if self.targ[0].xp + 3 < self.xp:
+            self.xtarg = self.targ[0].xp + 3
         else:
             if int(self.gun.cur_frame) == 0:
                 pygame.mixer.Sound('data\snipeFire.wav').play()
                 self.pazzle[1].k = 1
                 self.gun.k = 1
                 rdmg = self.dmg
-                if MAP[int(self.targ.yp)][int(self.targ.xp) + 1] == 'd':
-                    rdmg *= ifdodge(self.targ.dodge + 20)
-                else:
-                    rdmg *= ifdodge(self.targ.dodge)
-                self.targ.hp -= rdmg / 8.4999
-                self.targ.pazzle[1].hp -= rdmg / 8.4999
+                self.targ[0].hp -= rdmg / 9.001
                 self.ammonow -= 1 / 9.001
-                if self.targ.hp <= 0:
-                    self.targ.dead()
-                    for i in ENEMIS:
-                        if i != self and i.targ == self.targ:
-                            i.targ = ''
-                            i.xtarg = i.xp
-                            i.ytarg = i.yp
-                    self.targ = ''
+                if int(self.targ[0].hp) <= 0:
+                    self.targ[0].dead()
+                    if MY_TYPE == '' or MY_TYPE == 'first':
+                        for i in ENEMIS:
+                            if i.targ == self.targ:
+                                i.targ = 'z'
+                                i.xtarg = i.xp
+                                i.ytarg = i.yp
+                    else:
+                        for i in PERSES:
+                            if i.targ == self.targ:
+                                i.targ = 'z'
+                                i.xtarg = i.xp
+                                i.ytarg = i.yp
             if int(self.gun.cur_frame) == 3 and int(self.ammonow) != 0:
                 self.gun.cur_frame = 0
                 self.pazzle[1].cur_frame = 0
@@ -443,13 +427,19 @@ class MainEnemy(Enemy):
         else:
             k = 1
         DEAD.append(Death(self.rev(load_image('sniperDead.png', 2)), 10, 1, int(self.pazzle[1].x + -self.revers * self.pazzle[1].image.get_width() - ZX - k * load_image('sniperDead.png', 2).get_width() // 10), int(self.y - load_image('sniperDead.png', 2).get_height()), deads, self.revers))
-        del ENEMIS[ENEMIS.index(self)]
+        if MY_TYPE == '' or MY_TYPE == 'first':
+            del ENEMIS[ENEMIS.index(self)]
+        else:
+            del PERSES[PERSES.index(self)]
         for i in self.pazzle:
-            persE.remove(i)
+            if MY_TYPE == '' or MY_TYPE == 'first':
+                persE.remove(i)
+            else:
+                persF.remove(i)
             gun.remove(self.gun)
 
 
-class EnemyShild(Enemy):
+class EnemyShild(Pers):
     def __init__(self, stats, pazzle, t, x, y, shild):
         super().__init__(stats, pazzle, t, x, y)
         self.shild = shild
@@ -457,12 +447,30 @@ class EnemyShild(Enemy):
         self.shild.rect.x = int(self.shild.x)
         self.shild.y = self.pazzle[-1].y - self.shild.image.get_height() + self.shild.sy
         self.shild.rect.y = int(self.shild.y)
+        if MY_TYPE == 'second':
+            miniPers(self)
 
     def update(self):
+        if MY_TYPE == '':
+            stop = False
+            if self.targ == 'z':
+                for i in range(0, -5, -1):
+                    for j in range(3):
+                        if MAP[j][int(self.xp) + i] != 0 and MAP[j][int(self.xp) + i] != 'd' and MAP[j][
+                            int(self.xp) + i] != self.mommy and MAP[j][int(self.xp) + i] != 1:
+                            if MAP[j][int(self.xp) + i].tipe == '2':
+                                if MAP[j][int(self.xp) + i].targ != 'z':
+                                    self.targ = MAP[j][int(self.xp) + i].targ
+                                continue
+                            self.targ = [MAP[j][int(self.xp) + i], 1]
+                            stop = True
+                            break
+                    if stop:
+                        break
         super().update()
-        if self.targ != '':
+        if self.targ != 'z':
             a = self.pazzle + [self.shild]
-            if self.x > self.targ.x:
+            if self.x > self.targ[0].x:
                 if self.revers == 1:
                     for i in range(len(a) - 1, -1, -1):
                         a[i].frames = [pygame.transform.flip(j, True, False) for j in a[i].frames]
@@ -474,7 +482,7 @@ class EnemyShild(Enemy):
                             a[i].rect.x = int(a[i].x)
                         a[i].image = a[i].frames[int(a[i].cur_frame)]
                     self.revers = -1
-            if self.x < self.targ.x:
+            if self.x < self.targ[0].x:
                 if self.revers == -1:
                     for i in range(len(a) - 1, -1, -1):
                         a[i].frames = [pygame.transform.flip(j, True, False) for j in a[i].frames]
@@ -487,25 +495,25 @@ class EnemyShild(Enemy):
                         a[i].image = a[i].frames[int(a[i].cur_frame)]
                     self.revers = 1
             if self.revers == 1:
-                if self.xp != self.targ.xp - 1:
-                    self.xtarg = self.targ.xp - 1
+                if self.xp != self.targ[0].xp - 1:
+                    self.xtarg = self.targ[0].xp - 1
                 else:
                     if int(self.shild.cur_frame) == 0:
                         self.attack()
             if self.revers == -1:
-                if self.xp != self.targ.xp + 1:
-                    self.xtarg = self.targ.xp + 1
+                if self.xp != self.targ[0].xp + 1:
+                    self.xtarg = self.targ[0].xp + 1
                 else:
                     if int(self.shild.cur_frame) == 0:
                         self.attack()
-            if self.yp != self.targ.yp:
-                self.ytarg = self.targ.yp
+            if self.yp != self.targ[0].yp:
+                self.ytarg = self.targ[0].yp
             if int(self.shild.cur_frame) == 10:
-                self.targ.hp -= 15 / FPS
-                if self.targ.hp <= 0:
-                    self.targ.dead()
-            if self.targ.hp <= 0:
-                self.targ = ''
+                self.targ[0].hp -= self.dmg / 9.001
+                if int(self.targ[0].hp) <= 0:
+                    self.targ[0].dead()
+            if int(self.targ[0].hp) <= 0:
+                self.targ = 'z'
         self.shild.update()
         self.pazzle[1].update()
         self.moveS()
@@ -532,9 +540,15 @@ class EnemyShild(Enemy):
         self.tipe = ''
         DEAD.append(Death(self.rev(load_image('shildDead.png', 2)), 5, 1, int(self.pazzle[1].x - ZX), int(self.y - load_image('shildDead.png', 2).get_height()), deads, self.revers))
         for i in self.pazzle:
-            persE.remove(i)
+            if MY_TYPE == '' or MY_TYPE == 'first':
+                persE.remove(i)
+            else:
+                persF.remove(i)
         shild.remove(self.shild)
-        del ENEMIS[ENEMIS.index(self)]
+        if MY_TYPE == '' or MY_TYPE == 'first':
+            del ENEMIS[ENEMIS.index(self)]
+        else:
+            del PERSES[PERSES.index(self)]
 
     def attack(self):
         self.shild.k = 1
@@ -715,6 +729,17 @@ def fireSound():
     pygame.mixer.Sound('data\snipeFire.wav').play()
 
 
+def miniPers(self):
+    global Heads, HEADS
+    self.sprite = pygame.sprite.Sprite()
+    self.sprite.image = self.pazzle[0].image
+    self.sprite.rect = self.sprite.image.get_rect()
+    Heads.add(self.sprite)
+    HEADS.append(self.sprite)
+    self.sprite.rect.x = 5
+    self.sprite.rect.y = 20
+
+
 MAP = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
@@ -722,32 +747,19 @@ bloks = [Block(load_image('block.png', 2), other, 5, 1)]
 back1 = Background(pygame.transform.scale(load_image('poleu.png', 1), (2440, 520)), background1)
 clock = pygame.time.Clock()
 running = True
+running2 = False
+running3 = False
 runlning = False
-First = FriendSniper([10, 1, 0, 10, 0, 40], [PersHead(load_image('head.png', 2), 8, 1, persF, '10', 4, 4, 10, 10),
-                                PersBody(load_image('body.png', 2), 11, 1, persF, '11', -2, 4, 10, 10),
-                                PersLegs(load_image('go.png', 2), 8, 1, persF, '12', 10)], '1', -1, 0,
-             PersGun(load_image('firet.png', 2), 11, 1, gun, '13', -14, -4, 10), 1)
-Second = FriendSniper([10, 1, 0, 10, 0, 40], [PersHead(load_image('head.png', 2), 8, 1, persF, '10', 4, 4, 10, 10),
-                                PersBody(load_image('body.png', 2), 11, 1, persF, '11', -2, 4, 10, 10),
-                                PersLegs(load_image('go.png', 2), 8, 1, persF, '12', 10)], '1', -1, 1,
-             PersGun(load_image('firet.png', 2), 11, 1, gun, '43', -14, -4, 10), 1)
-One = EnemyShild([50, 0, 0, 0, 0, 30], [PersHead(load_image('enemyHead.png', 2), 1, 1, persE, '20', 18, 22, 2, 10),
-                                     PersBody(load_image('enemyBody.png', 2), 12, 1, persE, '21', -10, 6, 4, 10),
-                                     PersLegs(load_image('enemyLegs.png', 2), 7, 1, persE, '22', 10)], '2', 12, 0,
-              PersShild(load_image('shild.png', 2), 12, 1, shild, '24', 22, 30, -30, 10))
-Main = MainEnemy([20, 1, 0, 0, 0, 40], [PersHead(load_image('mainEnemyHead.png', 2), 8, 1, persE, '20', 10, 16, 0, 10),
-                                PersBody(load_image('mainEnemyBody.png', 2), 11, 1, persE, '21', -4, 16, 0, 10),
-                                PersLegs(load_image('mainEnemyLegs.png', 2), 8, 1, persE, '22', 10)], '2', 12, 1,
-             PersGun(load_image('mainEnemyGun.png', 2), 11, 1, gun, '33', -4, 16, -38), 7)
-Two = EnemyShild([50, 0, 0, 0, 0, 30], [PersHead(load_image('enemyHead.png', 2), 1, 1, persE, '20', 18, 22, 2, 10),
-                                     PersBody(load_image('enemyBody.png', 2), 12, 1, persE, '21', -10, 6, 4, 10),
-                                     PersLegs(load_image('enemyLegs.png', 2), 7, 1, persE, '22', 10)], '2', 12, 2,
-              PersShild(load_image('shild.png', 2), 12, 1, shild, '24', 22, 30, -30, 10))
-PERSES = [First, Second]
-PRS = PERSES.copy()
-ENEMIS = [One, Main, Two]
 DEAD = []
 THE_WORLD = True
+First = ''
+Second = ''
+One = ''
+Main = ''
+Two = ''
+a = ''
+PERSES = []
+ENEMIS = []
 back2 = Background(pygame.transform.scale(load_image('poled.png', 1), (2440, 520)), background2)
 aimn = Arrow()
 font = pygame.font.Font(None, 100)
@@ -756,13 +768,100 @@ text_x = width // 2 - text.get_width() // 2
 text_y = height // 2 - text.get_height() // 2
 text_w = text.get_width()
 text_h = text.get_height()
+texts = font.render("multi", 20, (73, 66, 61))
+texts_x = width // 2 - texts.get_width() // 2
+texts_y = height // 2 + texts.get_height()
+texts_w = texts.get_width()
+texts_h = texts.get_height()
 heds = pygame.font.Font(None, 30)
 hi = AnimatedSprite(load_image('hi.png', 3), 10, 1, -30, height // 2 - 20, animH)
 hi.k = 1
-for i in range(len(HEADS)):
-    HEADS[i].rect.x = i * 200
 start = False
-retry = True
+
+
+def fe(i):
+    if MY_TYPE == 'first' or MY_TYPE == '':
+        return i
+    else:
+        if i == persE:
+            return persF
+        else:
+            return persE
+
+
+def make_perses():
+    global First, Second, One, Main, Two, PERSES, ENEMIS
+    First = FriendSniper([10, 5, 0, 10, 0, 40],
+                         [PersHead(load_image('head.png', 2), 8, 1, fe(persF), '10', 4, 4, 10, 10),
+                          PersBody(load_image('body.png', 2), 11, 1, fe(persF), '11', -2, 4, 10, 10),
+                          PersLegs(load_image('go.png', 2), 8, 1, fe(persF), '12', 10)], '1', 2, 0,
+                         PersGun(load_image('firet.png', 2), 11, 1, gun, '13', -14, -4, 10), 1)
+    Second = FriendSniper([10, 5, 0, 10, 0, 40],
+                          [PersHead(load_image('head.png', 2), 8, 1, fe(persF), '10', 4, 4, 10, 10),
+                           PersBody(load_image('body.png', 2), 11, 1, fe(persF), '11', -2, 4, 10, 10),
+                           PersLegs(load_image('go.png', 2), 8, 1, fe(persF), '12', 10)], '1', 2, 1,
+                          PersGun(load_image('firet.png', 2), 11, 1, gun, '43', -14, -4, 10), 1)
+    One = EnemyShild([50, 5, 0, 0, 0, 30],
+                     [PersHead(load_image('enemyHead.png', 2), 1, 1, fe(persE), '20', 18, 22, 2, 10),
+                      PersBody(load_image('enemyBody.png', 2), 12, 1, fe(persE), '21', -10, 6, 4, 10),
+                      PersLegs(load_image('enemyLegs.png', 2), 7, 1, fe(persE), '22', 10)], '2', 12, 0,
+                     PersShild(load_image('shild.png', 2), 12, 1, shild, '24', 22, 30, -30, 10))
+    Main = MainEnemy([20, 5, 0, 0, 0, 40],
+                     [PersHead(load_image('mainEnemyHead.png', 2), 8, 1, fe(persE), '20', 10, 16, 0, 10),
+                      PersBody(load_image('mainEnemyBody.png', 2), 11, 1, fe(persE), '21', -4, 16, 0, 10),
+                      PersLegs(load_image('mainEnemyLegs.png', 2), 8, 1, fe(persE), '22', 10)], '2', 12, 1,
+                     PersGun(load_image('mainEnemyGun.png', 2), 11, 1, gun, '33', -4, 16, -38), 7)
+    Two = EnemyShild([50, 5, 0, 0, 0, 30],
+                     [PersHead(load_image('enemyHead.png', 2), 1, 1, fe(persE), '20', 18, 22, 2, 10),
+                      PersBody(load_image('enemyBody.png', 2), 12, 1, fe(persE), '21', -10, 6, 4, 10),
+                      PersLegs(load_image('enemyLegs.png', 2), 7, 1, fe(persE), '22', 10)], '2', 12, 2,
+                     PersShild(load_image('shild.png', 2), 12, 1, shild, '24', 22, 30, -30, 10))
+    PERSES = [First, Second]
+    ENEMIS = [One, Main, Two]
+
+
+def rec():
+    global running3, runlning, text, a
+    res = sock.recv(1024).decode().split(',')
+    if res == 'win':
+        running3 = False
+        runlning = True
+        text = font.render("YOU WIN!", 30, (73, 66, 61))
+        win = AnimatedSprite(load_image('win.png', 3), 4, 1, -30, height // 2 - 20, animW)
+        win.k = 1
+        a = [win, animW, persF]
+        return False
+    elif res == 'lose':
+        running3 = False
+        runlning = True
+        text = font.render("YOU LOSE!", 30, (73, 66, 61))
+        lose = AnimatedSprite(load_image('lose.png', 3), 12, 1, -30, height // 2 - 20, animL)
+        lose.k = 1
+        a = [lose, animL, persE]
+        return False
+    resr = []
+    for i in range(len(ENEMIS)):
+        s = int((len(res) - 1) / len(ENEMIS))
+        resr.append(res[i * s:i * s + s])
+    for i in range(len(resr)):
+        if resr[i][0] == 'z':
+            ENEMIS[i].targ = 'z'
+        else:
+            print(ENEMIS, [i.hp for i in ENEMIS])
+            ENEMIS[i].targ = [PERSES[int(resr[i][0])], 0]
+        ENEMIS[i].xtarg = int(resr[i][1])
+        ENEMIS[i].ytarg = int(resr[i][2])
+    return True
+
+
+def sen():
+    res = ''
+    for i in PERSES:
+        if i.targ == 'z':
+            res += str('z') + ',' + str(int(i.xtarg)) + ',' + str(int(i.ytarg)) + ','
+        else:
+            res += str(ENEMIS.index(i.targ[0])) + ',' + str(int(i.xtarg)) + ',' + str(int(i.ytarg)) + ','
+    sock.send(res.encode())
 
 retry = False
 while running:
@@ -771,8 +870,10 @@ while running:
             running = False
         if event.type == pygame.MOUSEMOTION:
             x, y = event.pos
-            if text_x - 10 < event.pos[0] < text_x + text_w + 10 and \
-                    text_y - 10 < event.pos[1] < text_y + text_h + 10 and not start:
+            if (texts_x - 10 < event.pos[0] < texts_x + texts_w + 10 and \
+                    texts_y - 10 < event.pos[1] < texts_y + texts_h + 10 and not start) or \
+                (text_x - 10 < event.pos[0] < text_x + text_w + 10 and \
+                    text_y - 10 < event.pos[1] < text_y + text_h + 10 and not start):
                 aimn.image = load_image('aimFriend.png', 1 / 16)
             else:
                 aimn.image = load_image('aim.png', 1 / 24)
@@ -780,17 +881,25 @@ while running:
             if event.button == 1:
                 if text_x - 10 < event.pos[0] < text_x + text_w + 10 and \
                         text_y - 10 < event.pos[1] < text_y + text_h + 10:
-                    start = True
+                    running = False
+                    make_perses()
                     for i in range(len(PERSES)):
                         PERSES[i].xtarg = i // 3 + 2
                         PERSES[i].ytarg = 0 + i % 3
+                    running2 = True
+                if texts_x - 10 < event.pos[0] < texts_x + texts_w + 10 and \
+                    texts_y - 10 < event.pos[1] < texts_y + texts_h + 10:
+                    sock = socket.socket()
+                    sock.connect(('192.168.1.7', 9090))
+                    MY_TYPE = sock.recv(1024).decode()
+                    running = False
+                    make_perses()
+                    running2 = True
     if pygame.mouse.get_focused():
         pygame.mouse.set_visible(False)
         aimn.rect.x = x
         aimn.rect.y = y
     background1.draw(screen)
-    for i in PERSES + ENEMIS:
-        i.update()
     persF.draw(screen)
     shild.draw(screen)
     gun.draw(screen)
@@ -804,23 +913,41 @@ while running:
         screen.blit(text, (text_x, text_y))
         pygame.draw.rect(screen, pygame.Color('black'), (text_x - 10, text_y - 10,
                                                text_w + 20, text_h + 10), 3)
+        pygame.draw.rect(screen, (48, 213, 200), (texts_x - 10, texts_y - 10,
+                                                  texts_w + 20, texts_h + 10))
+        screen.blit(texts, (texts_x, texts_y))
+        pygame.draw.rect(screen, pygame.Color('black'), (texts_x - 10, texts_y - 10,
+                                                         texts_w + 20, texts_h + 10), 3)
         aim.draw(screen)
     pygame.draw.rect(screen, pygame.Color('black'), (0, 0, width, 100))
     pygame.draw.rect(screen, pygame.Color('black'), (0, height - 100, width, 100))
     clock.tick(FPS)
     pygame.display.flip()
-    if all([i.xp == i.xtarg for i in PERSES] + [i.yp == i.ytarg for i in PERSES]) and start:
-        break
+
+
+if MY_TYPE == 'first':
+    background1.draw(screen)
+    gun.draw(screen)
+    shild.draw(screen)
+    background2.draw(screen)
+    print(sock.recv(1024).decode())
+elif MY_TYPE == 'second':
+    ENEMIS, PERSES = PERSES.copy(), ENEMIS.copy()
+    print(sock.recv(1024).decode())
+
+PRS = PERSES.copy()
+for i in range(len(HEADS)):
+    HEADS[i].rect.x = i * 200
+
+
 a = 100
-while running:
+while running2:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            running2 = False
     background1.draw(screen)
     for i in PERSES + ENEMIS:
         i.update()
-    if pygame.mouse.get_focused():
-        pygame.mouse.set_visible(False)
     persF.draw(screen)
     gun.draw(screen)
     shild.draw(screen)
@@ -829,14 +956,15 @@ while running:
     pygame.draw.rect(screen, pygame.Color('black'), (0, height - a, width, a))
     a -= 100 / FPS
     if int(a) == 0:
+        running3 = True
         break
     clock.tick(FPS)
     pygame.display.flip()
 x, y = 0, 0
-while running:
+while running3:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            running3 = False
         if event.type == pygame.KEYDOWN:
             back1.move(event)
             back2.move(event)
@@ -857,6 +985,34 @@ while running:
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 aimn.action()
+    if MY_TYPE == 'first':
+        sen()
+        rec()
+    elif MY_TYPE == 'second':
+        if rec():
+            sen()
+    print([i.hp for i in ENEMIS], 'E')
+    print([i.hp for i in PERSES], 'F')
+    if len(PERSES) == 0:
+        running3 = False
+        runlning = True
+        text = font.render("YOU LOSE!", 30, (73, 66, 61))
+        lose = AnimatedSprite(load_image('lose.png', 3), 12, 1, -30, height // 2 - 20, animL)
+        lose.k = 1
+        a = [lose, animL, persE]
+        if MY_TYPE == 'first':
+            sock.send('win'.encode())
+            break
+    if len(ENEMIS) == 0:
+        running3 = False
+        runlning = True
+        text = font.render("YOU WIN!", 30, (73, 66, 61))
+        win = AnimatedSprite(load_image('win.png', 3), 4, 1, -30, height // 2 - 20, animW)
+        win.k = 1
+        a = [win, animW, persF]
+        if MY_TYPE == 'first':
+            sock.send('lose'.encode())
+            break
     back1.update()
     back2.update()
     aimn.opr()
@@ -885,7 +1041,8 @@ while running:
         pygame.draw.circle(screen, pygame.Color('black'), (h.rect.x + h.image.get_width() // 2, h.rect.y + h.image.get_height() // 2), h.image.get_height(), 6)
     Heads.draw(screen)
     for i in range(len(HEADS)):
-        screen.blit(heds.render("{}/{}".format(int(PRS[i].ammonow), PRS[i].ammo), 30, (0, 0, 0)),
+        if str(type(PRS[i])) != "<class '__main__.EnemyShild'>":
+            screen.blit(heds.render("{}/{}".format(int(PRS[i].ammonow), PRS[i].ammo), 30, (0, 0, 0)),
                     (HEADS[i].rect.x + 50, HEADS[i].rect.y))
         screen.blit(heds.render("{}/{}".format(int(PRS[i].hp), PRS[i].maxhp), 30, (0, 0, 0)),
                     (HEADS[i].rect.x + 50, HEADS[i].rect.y + 20))
@@ -894,20 +1051,6 @@ while running:
         aimn.rect.x = x
         aimn.rect.y = y
         aim.draw(screen)
-    if len(PERSES) == 0:
-        running = False
-        runlning = True
-        text = font.render("YOU LOSE!", 30, (73, 66, 61))
-        lose = AnimatedSprite(load_image('lose.png', 3), 12, 1, -30, height // 2 - 20, animL)
-        lose.k = 1
-        a = [lose, animL, persE]
-    if len(ENEMIS) == 0:
-        running = False
-        runlning = True
-        text = font.render("YOU WIN!", 30, (73, 66, 61))
-        win = AnimatedSprite(load_image('win.png', 3), 4, 1, -30, height // 2 - 20, animW)
-        win.k = 1
-        a = [win, animW, persF]
     clock.tick(FPS)
     pygame.display.flip()
 text_x = width // 2 - text.get_width() // 2
@@ -919,6 +1062,7 @@ text2_x = width // 2 - text2.get_width() // 2
 text2_y = height // 2 - text2.get_height() // 2
 text2_w = text2.get_width()
 text2_h = text2.get_height()
+
 while runlning:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
