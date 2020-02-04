@@ -916,7 +916,7 @@ while running:
                 if texts_x - 10 < event.pos[0] < texts_x + texts_w + 10 and \
                     texts_y - 10 < event.pos[1] < texts_y + texts_h + 10:
                     sock = socket.socket()
-                    sock.connect(('192.168.0.129', 9090))
+                    sock.connect(('192.168.0.129', 9090)) #ВОТ СЮДА ВВОДИТСЯ IP СЕТИ (WIFI), не ip4
                     MY_TYPE = sock.recv(1024).decode()
                     running = False
                     make_perses()
