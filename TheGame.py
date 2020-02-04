@@ -213,6 +213,14 @@ class FriendSniper(Pers):
             self.attack()
             if int(self.targ[0].hp) <= 0:
                 self.targ[0].dead()
+                if MY_TYPE == '' or MY_TYPE == 'first':
+                    for i in PERSES:
+                        if i != self and i.targ[0] == self.targ[0]:
+                            i.targ = 'z'
+                else:
+                    for i in ENEMIS:
+                        if i != self and i.targ[0] == self.targ[0]:
+                            i.targ = 'z'
                 self.targ = 'z'
         elif self.ammonow < self.ammo and self.gun.cur_frame < 6:
             self.gun.cur_frame = 6
@@ -791,12 +799,12 @@ def fe(i):
 
 def make_perses():
     global First, Second, One, Main, Two, PERSES, ENEMIS
-    First = FriendSniper([10, 5, 0, 10, 0, 40],
+    First = FriendSniper([10, 10, 0, 10, 0, 40],
                          [PersHead(load_image('head.png', 2), 8, 1, fe(persF), '10', 4, 4, 10, 10),
                           PersBody(load_image('body.png', 2), 11, 1, fe(persF), '11', -2, 4, 10, 10),
                           PersLegs(load_image('go.png', 2), 8, 1, fe(persF), '12', 10)], '1', 2, 0,
                          PersGun(load_image('firet.png', 2), 11, 1, gun, '13', -14, -4, 10), 1)
-    Second = FriendSniper([10, 5, 0, 10, 0, 40],
+    Second = FriendSniper([10, 10, 0, 10, 0, 40],
                           [PersHead(load_image('head.png', 2), 8, 1, fe(persF), '10', 4, 4, 10, 10),
                            PersBody(load_image('body.png', 2), 11, 1, fe(persF), '11', -2, 4, 10, 10),
                            PersLegs(load_image('go.png', 2), 8, 1, fe(persF), '12', 10)], '1', 2, 1,
@@ -806,7 +814,7 @@ def make_perses():
                       PersBody(load_image('enemyBody.png', 2), 12, 1, fe(persE), '21', -10, 6, 4, 10),
                       PersLegs(load_image('enemyLegs.png', 2), 7, 1, fe(persE), '22', 10)], '2', 12, 0,
                      PersShild(load_image('shild.png', 2), 12, 1, shild, '24', 22, 30, -30, 10))
-    Main = MainEnemy([20, 5, 0, 0, 0, 40],
+    Main = MainEnemy([25, 5, 0, 0, 0, 40],
                      [PersHead(load_image('mainEnemyHead.png', 2), 8, 1, fe(persE), '20', 10, 16, 0, 10),
                       PersBody(load_image('mainEnemyBody.png', 2), 11, 1, fe(persE), '21', -4, 16, 0, 10),
                       PersLegs(load_image('mainEnemyLegs.png', 2), 8, 1, fe(persE), '22', 10)], '2', 12, 1,
@@ -823,31 +831,28 @@ def make_perses():
 def rec():
     global running3, runlning, text, a
     res = sock.recv(1024).decode().split(',')
-    if res == 'win':
+    if res[-1] == 'win':
         running3 = False
         runlning = True
         text = font.render("YOU WIN!", 30, (73, 66, 61))
         win = AnimatedSprite(load_image('win.png', 3), 4, 1, -30, height // 2 - 20, animW)
         win.k = 1
         a = [win, animW, persF]
-        return False
-    elif res == 'lose':
+    elif res[-1] == 'lose':
         running3 = False
         runlning = True
         text = font.render("YOU LOSE!", 30, (73, 66, 61))
         lose = AnimatedSprite(load_image('lose.png', 3), 12, 1, -30, height // 2 - 20, animL)
         lose.k = 1
         a = [lose, animL, persE]
-        return False
     resr = []
     for i in range(len(ENEMIS)):
-        s = int((len(res) - 1) / len(ENEMIS))
+        s = int((len(res) - 1) // len(ENEMIS))
         resr.append(res[i * s:i * s + s])
     for i in range(len(resr)):
         if resr[i][0] == 'z':
             ENEMIS[i].targ = 'z'
         else:
-            print(ENEMIS, [i.hp for i in ENEMIS])
             ENEMIS[i].targ = [PERSES[int(resr[i][0])], 0]
         ENEMIS[i].xtarg = int(resr[i][1])
         ENEMIS[i].ytarg = int(resr[i][2])
@@ -855,12 +860,33 @@ def rec():
 
 
 def sen():
+    global running3, runlning, a, text
     res = ''
     for i in PERSES:
         if i.targ == 'z':
             res += str('z') + ',' + str(int(i.xtarg)) + ',' + str(int(i.ytarg)) + ','
         else:
             res += str(ENEMIS.index(i.targ[0])) + ',' + str(int(i.xtarg)) + ',' + str(int(i.ytarg)) + ','
+    if len(PERSES) == 0:
+        running3 = False
+        runlning = True
+        text = font.render("YOU LOSE!", 30, (73, 66, 61))
+        lose = AnimatedSprite(load_image('lose.png', 3), 12, 1, -30, height // 2 - 20, animL)
+        lose.k = 1
+        a = [lose, animL, persE]
+        if MY_TYPE == 'first':
+            res += 'win'
+    if len(ENEMIS) == 0:
+        running3 = False
+        runlning = True
+        text = font.render("YOU WIN!", 30, (73, 66, 61))
+        win = AnimatedSprite(load_image('win.png', 3), 4, 1, -30, height // 2 - 20, animW)
+        win.k = 1
+        a = [win, animW, persF]
+        if MY_TYPE == 'first':
+            res += 'lose'
+    else:
+        res += 'no'
     sock.send(res.encode())
 
 retry = False
@@ -890,7 +916,7 @@ while running:
                 if texts_x - 10 < event.pos[0] < texts_x + texts_w + 10 and \
                     texts_y - 10 < event.pos[1] < texts_y + texts_h + 10:
                     sock = socket.socket()
-                    sock.connect(('192.168.1.7', 9090))
+                    sock.connect(('192.168.0.129', 9090))
                     MY_TYPE = sock.recv(1024).decode()
                     running = False
                     make_perses()
@@ -989,30 +1015,10 @@ while running3:
         sen()
         rec()
     elif MY_TYPE == 'second':
-        if rec():
-            sen()
-    print([i.hp for i in ENEMIS], 'E')
-    print([i.hp for i in PERSES], 'F')
-    if len(PERSES) == 0:
-        running3 = False
-        runlning = True
-        text = font.render("YOU LOSE!", 30, (73, 66, 61))
-        lose = AnimatedSprite(load_image('lose.png', 3), 12, 1, -30, height // 2 - 20, animL)
-        lose.k = 1
-        a = [lose, animL, persE]
-        if MY_TYPE == 'first':
-            sock.send('win'.encode())
-            break
-    if len(ENEMIS) == 0:
-        running3 = False
-        runlning = True
-        text = font.render("YOU WIN!", 30, (73, 66, 61))
-        win = AnimatedSprite(load_image('win.png', 3), 4, 1, -30, height // 2 - 20, animW)
-        win.k = 1
-        a = [win, animW, persF]
-        if MY_TYPE == 'first':
-            sock.send('lose'.encode())
-            break
+        rec()
+        sen()
+    if not running3:
+        break
     back1.update()
     back2.update()
     aimn.opr()
@@ -1028,6 +1034,9 @@ while running3:
     for i in bloks:
         i.update()
     if THE_WORLD:
+        for i in PERSES + ENEMIS:
+            i.update()
+    elif MY_TYPE != '':
         for i in PERSES + ENEMIS:
             i.update()
     deads.draw(screen)
@@ -1107,3 +1116,6 @@ while runlning:
     a[1].draw(screen)
     clock.tick(FPS)
     pygame.display.flip()
+
+if MY_TYPE != '':
+    sock.close()
